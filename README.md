@@ -1,0 +1,1 @@
+superpoint generation for `Unsupervised Point Cloud Co-part Segmentation via Co-attended Superpoint Generation and Aggregation`
