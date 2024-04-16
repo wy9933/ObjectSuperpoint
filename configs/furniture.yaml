@@ -1,0 +1,49 @@
+optimizer: {
+  type: AdamW,
+  kwargs: {
+    lr: 0.001,
+    weight_decay: 0.0005
+}}
+
+scheduler: {
+  type: CosLR,
+  kwargs: {
+    epochs: 1000
+}}
+
+model: {
+  encoder: {
+    input_dim: 3,
+    output_dim: 512,
+    use_global: True,
+    hidden_dim: [64, 256],
+  },
+  superpoint_num: 50,
+  mlp_hidden_dim: [256, 64],
+  param_num: 14,
+}
+
+dataset: {
+  NAME: StyleDataset,
+  DATA_ROOT: /home/magic2/wy/style_transfer/Point-BERT/data/style/furniture,
+  DATA_DIR: pc,
+  SPLIT_DIR: split,
+  N_POINTS: 20000,
+
+  train: {
+    npoints: 20000
+  },
+  test: {
+    npoints: 20000
+  },
+  val: {
+    npoints: 20000
+  },
+  whole: {
+    npoints: 20000
+  }
+}
+
+train: {
+  batch_size: 16
+}
