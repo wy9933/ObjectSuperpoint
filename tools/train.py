@@ -219,7 +219,7 @@ def validate(args, model, val_loader, criterion, epoch, summarywriter):
                       (i + 1, n_batches, ['%.8f' % l for l in losses.val()]))
 
         # visual output
-        if i == 0 and(epoch + 1) % 25    == 0:
+        if i == 0 and(epoch + 1) % 25 == 0:
             colors = torch.rand(points.shape) * 255
             summarywriter.add_mesh('val/pointcloud', points, colors, global_step=epoch)
 

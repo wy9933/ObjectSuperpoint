@@ -210,7 +210,7 @@ class SuperPoint(nn.Module):
         # sp balance loss
         sp_atten_per_sp = torch.sum(sp_atten, dim=-1)  # B M
         sp_atten_sum = torch.sum(sp_atten_per_sp, dim=-1, keepdim=True) / M  # B 1
-        loss_sp_balance = torch.sum(sp_atten_per_sp - sp_atten_sum) / M
+        loss_sp_balance = torch.sum((sp_atten_per_sp - sp_atten_sum) ** 2) / M
 
         # loss_fit = torch.tensor(0.0, device=sp_atten.device)
         # loss_ss = torch.tensor(0.0, device=sp_atten.device)
