@@ -172,25 +172,40 @@ class SuperPoint(nn.Module):
 
         # points to superquadrics loss
         distance_p2d = distance_point2superquadric(points, sample_points, sp_param)  # B N M
+        inf_nan_to_num(distance_p2d)
         distance_p2d = distance_p2d.transpose(2, 1)  # B M N
         loss_fit_p2d = torch.sum(distance_p2d * sp_atten) / (N * M)
 
         # superquadrics to points loss
         max_probs, max_indices = torch.max(sp_atten, dim=1)
-        one_hot = torch.zeros_like(sp_atten).to(sp_atten.device)
+        one_hot = torch.zeros_like(sp_atten, device=sp_atten.device)
         one_hot = one_hot.scatter_(1, max_indices.unsqueeze(1), 1)  # B M N
         distance_d2p = distance_superquadric2point(points, sample_points, sp_param, one_hot)
+        inf_nan_to_num(distance_d2p)
         loss_fit_d2p = torch.sum(distance_d2p) / (M * L)
 
-        loss_fit = loss_fit_d2p + loss_fit_p2d
+        loss_fit = loss_fit_p2d + loss_fit_d2p
+        # loss_fit = loss_fit_d2p
 
         # ss loss
         sp_feat_un = sp_feat.unsqueeze(2)          # B M 1 C
         p_feat_un = p_feat.unsqueeze(1)            # B 1 N C
         feat_dist = sp_feat_un - p_feat_un         # B M N C
         feat_dist = torch.norm(feat_dist, dim=-1)  # B M N
+        inf_nan_to_num(feat_dist)
         feat_dist = feat_dist * sp_atten           # B M N
-        loss_ss = torch.sum(feat_dist)
+        loss_ss = torch.sum(feat_dist) / (M * N)
+
+        # feat_dist = torch.zeros(B, M, N, device=p_feat.device)
+        # for b in range(B):
+        #     for m in range(M):
+        #         _sp_feat = sp_feat[b, m]  # C
+        #         _p_feat = p_feat[b]  # N C
+        #         _sp_atten = sp_atten[b, m]  # N
+        #         _feat_dist = torch.norm(_sp_feat - _p_feat, dim=-1) * _sp_atten  # N
+        #         feat_dist[b, m] = _feat_dist
+        # inf_nan_to_num(feat_dist)
+        # loss_ss = torch.sum(feat_dist) / (M * N)
 
         # loc loss
         centriods = torch.bmm(F.normalize(sp_atten, p=1, dim=2), points)  # B M 3
@@ -198,17 +213,20 @@ class SuperPoint(nn.Module):
         points_un = points.unsqueeze(1)              # B 1 N 3
         coord_dist = centriods - points_un           # B M N 3
         coord_dist = torch.norm(coord_dist, dim=-1)  # B M N
+        inf_nan_to_num(coord_dist)
         coord_dist = coord_dist * sp_atten           # B M N
-        loss_loc = torch.sum(coord_dist)
+        loss_loc = torch.sum(coord_dist) / (M * N)
 
         # sp balance loss
         sp_atten_per_sp = torch.sum(sp_atten, dim=-1)  # B M
         sp_atten_sum = torch.sum(sp_atten_per_sp, dim=-1, keepdim=True) / M  # B 1
         loss_sp_balance = torch.sum(sp_atten_per_sp - sp_atten_sum) / M
 
-        total_loss = 1.0 * loss_fit + 1.0 * loss_ss + 1.0 * loss_loc + 0.001 * loss_sp_balance
-
-        return total_loss
+        # loss_fit = torch.tensor(0.0, device=sp_atten.device)
+        # loss_ss = torch.tensor(0.0, device=sp_atten.device)
+        # loss_loc = torch.tensor(0.0, device=sp_atten.device)
+        # loss_sp_balance = torch.tensor(0.0, device=sp_atten.device)
+        return loss_fit, loss_ss, loss_loc, loss_sp_balance
 
 if __name__ == "__main__":
     from torchsummary import summary

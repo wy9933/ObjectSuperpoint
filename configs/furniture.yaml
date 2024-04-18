@@ -31,19 +31,21 @@ dataset: {
   N_POINTS: 20000,
 
   train: {
-    npoints: 20000
+    npoints: 4096,
   },
   test: {
-    npoints: 20000
+    npoints: 4096,
   },
   val: {
-    npoints: 20000
+    npoints: 4096,
   },
   whole: {
-    npoints: 20000
-  }
+    npoints: 4096,
+  },
 }
 
 train: {
-  batch_size: 16
+  batch_size: 4, # 4096*4
+  max_epoch: 1000,
+  ckpt_save_freq: 100,
 }

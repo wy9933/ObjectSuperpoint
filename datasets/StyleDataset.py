@@ -6,15 +6,15 @@ from utils.utils import *
 
 
 class StyleDataset(data.Dataset):
-    def __init__(self, config, split='train'):
+    def __init__(self, args, config, split='train'):
         self.split = split
 
         assert self.split in ['train', 'test', 'val', 'whole']
 
-        self.data_root = config.DATA_ROOT
-        self.data_dir = config.DATA_DIR
-        self.split_dir = config.SPLIT_DIR
-        self.npoints = config.N_POINTS
+        self.data_root = config.dataset.DATA_ROOT
+        self.data_dir = config.dataset.DATA_DIR
+        self.split_dir = config.dataset.SPLIT_DIR
+        self.npoints = config.dataset.N_POINTS
 
         self.permutation = np.arange(self.npoints)
 
@@ -23,19 +23,19 @@ class StyleDataset(data.Dataset):
         else:
             self.data_list_file = os.path.join(self.data_root, self.split_dir, 'test.txt')
 
-        self.sample_points_num = config[self.split].npoints
+        self.sample_points_num = config.dataset[self.split].npoints
 
-        print_log(f'Sample out {self.sample_points_num} points')
-        print_log(f'Open file {self.data_list_file}')
+        print_log(args, f'Sample out {self.sample_points_num} points')
+        print_log(args, f'Open file {self.data_list_file}')
 
         with open(self.data_list_file, 'r') as f:
             lines = f.readlines()
 
-        if self.whole:
+        if split == 'whole':
             test_data_list_file = os.path.join(self.data_root, self.split_dir, 'test.txt')
             with open(test_data_list_file, 'r') as f:
                 test_lines = f.readlines()
-            print_log(f'Open file {test_data_list_file}')
+            print_log(args, f'Open file {test_data_list_file}')
             lines = test_lines + lines
 
         self.file_list = []
@@ -48,7 +48,7 @@ class StyleDataset(data.Dataset):
                 'model_id': model_id,
                 'file_path': line
             })
-        print_log(f'{len(self.file_list)} instances were loaded')
+        print_log(args, f'{len(self.file_list)} instances were loaded')
 
     def pc_norm(self, pc):
         centroid = np.mean(pc, axis=0)
