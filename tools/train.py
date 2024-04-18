@@ -29,7 +29,7 @@ def train(args, config, summarywriter):
 
     val_loader = data.DataLoader(train_dataset,
                                  batch_size=1,
-                                 shuffle=True,
+                                 shuffle=False,
                                  num_workers=args.num_workers,
                                  drop_last=True)
 
@@ -49,7 +49,7 @@ def train(args, config, summarywriter):
         raise NotImplementedError()
 
     if config.scheduler.type == 'CosLR':
-        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.scheduler.kwargs.epochs)
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.max_epoch)
     else:
         raise NotImplementedError()
 
@@ -75,7 +75,7 @@ def train(args, config, summarywriter):
 
         # validate
         if (epoch+1) % args.val_freq == 0:
-            losses_val = validate(args, model, val_loader, criterion, epoch)
+            losses_val = validate(args, model, val_loader, criterion, epoch, summarywriter)
 
             summarywriter.add_scalar('ValLoss/Epoch/loss_fit', losses_val.avg(0), epoch)
             summarywriter.add_scalar('ValLoss/Epoch/loss_ss', losses_val.avg(1), epoch)
@@ -190,7 +190,7 @@ def train_one_epoch(args, config, model, train_loader, optimizer, criterion, epo
     return losses
 
 
-def validate(args, model, val_loader, criterion, epoch):
+def validate(args, model, val_loader, criterion, epoch, summarywriter):
     print_log(args, f"Start validating epoch {epoch}")
     losses = AverageMeter(['loss_fit', 'loss_ss', 'loss_loc', 'loss_sp_balance', 'all_loss'])
     n_batches = len(val_loader)
@@ -213,10 +213,16 @@ def validate(args, model, val_loader, criterion, epoch):
         torch.cuda.empty_cache()
 
         # message output
-        if (i + 1) % 20 == 0:
+        if (i + 1) % 50 == 0:
             print_log(args,
                       'Validate [%d/%d] Losses = %s' %
                       (i + 1, n_batches, ['%.8f' % l for l in losses.val()]))
+
+        # visual output
+        if i == 0 and(epoch + 1) % 25    == 0:
+            colors = torch.rand(points.shape) * 255
+            summarywriter.add_mesh('val/pointcloud', points, colors, global_step=epoch)
+
     print_log(args,
               '[Validate] EPOCH: %d Losses = %s' %
               (epoch, ['%.8f' % l for l in losses.avg()]))

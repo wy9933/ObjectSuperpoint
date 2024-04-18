@@ -8,17 +8,16 @@ optimizer: {
 scheduler: {
   type: CosLR,
   kwargs: {
-    epochs: 1000
 }}
 
 model: {
   encoder: {
     input_dim: 3,
-    output_dim: 512,
+    output_dim: [512, 256],
     use_global: True,
-    hidden_dim: [64, 256],
+    hidden_dim: [64, 256, 1024],
   },
-  superpoint_num: 50,
+  superpoint_num: 15,
   mlp_hidden_dim: [256, 64],
   param_num: 14,
 }
@@ -46,6 +45,6 @@ dataset: {
 
 train: {
   batch_size: 4, # 4096*4
-  max_epoch: 1000,
+  max_epoch: 600,
   ckpt_save_freq: 100,
 }

@@ -18,7 +18,8 @@ def get_args():
 
     # test args
     parser.add_argument('--test', action='store_true', default=False, help='test mode for certain ckpt')
-    parser.add_argument('--ckpts', type=str, default=None, help='test used ckpt path')
+    parser.add_argument('--ckpt_path', type=str, default=None, help='test used ckpt path')
+    parser.add_argument('--vis', action='store_true', default=False, help='test mode visualize superpoint result')
 
     args = parser.parse_args()
 
@@ -30,13 +31,13 @@ def get_args():
         raise ValueError(
             '--resume and --start_ckpts cannot be both activate')
 
-    if args.test and args.ckpts is None:
+    if args.test and args.ckpt_path is None:
         raise ValueError(
             'ckpts shouldnt be None while test mode')
 
+    args.experiment_path = os.path.join('./experiments', args.exp_name)
     if args.test:
-        args.exp_name = 'test_' + args.exp_name
-    args.experiment_path = os.path.join('./experiments', Path(args.config).stem, args.exp_name)
+        args.experiment_path = os.path.join(args.experiment_path, 'test')
     create_experiment_dir(args)
     return args
 
