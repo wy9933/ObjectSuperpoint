@@ -67,21 +67,21 @@ def train(args, config, summarywriter):
 
         is_best = False
 
-        summarywriter.add_scalar('Loss/Epoch/loss_fit', losses.avg(0), epoch)
-        summarywriter.add_scalar('Loss/Epoch/loss_ss', losses.avg(1), epoch)
-        summarywriter.add_scalar('Loss/Epoch/loss_loc', losses.avg(2), epoch)
-        summarywriter.add_scalar('Loss/Epoch/loss_sp_balance', losses.avg(3), epoch)
-        summarywriter.add_scalar('Loss/Epoch/all_loss', losses.avg(4), epoch)
+        summarywriter.add_scalar('Loss/Epoch/0loss_fit', losses.avg(0), epoch)
+        summarywriter.add_scalar('Loss/Epoch/1loss_ss', losses.avg(1), epoch)
+        summarywriter.add_scalar('Loss/Epoch/2loss_loc', losses.avg(2), epoch)
+        summarywriter.add_scalar('Loss/Epoch/3loss_sp_balance', losses.avg(3), epoch)
+        summarywriter.add_scalar('Loss/Epoch/4all_loss', losses.avg(4), epoch)
 
         # validate
         if (epoch+1) % args.val_freq == 0:
-            losses_val = validate(args, model, val_loader, criterion, epoch, summarywriter)
+            losses_val = validate(args, config, model, val_loader, criterion, epoch, summarywriter)
 
-            summarywriter.add_scalar('ValLoss/Epoch/loss_fit', losses_val.avg(0), epoch)
-            summarywriter.add_scalar('ValLoss/Epoch/loss_ss', losses_val.avg(1), epoch)
-            summarywriter.add_scalar('ValLoss/Epoch/loss_loc', losses_val.avg(2), epoch)
-            summarywriter.add_scalar('ValLoss/Epoch/loss_sp_balance', losses_val.avg(3), epoch)
-            summarywriter.add_scalar('ValLoss/Epoch/all_loss', losses_val.avg(4), epoch)
+            summarywriter.add_scalar('ValLoss/Epoch/0loss_fit', losses_val.avg(0), epoch)
+            summarywriter.add_scalar('ValLoss/Epoch/1loss_ss', losses_val.avg(1), epoch)
+            summarywriter.add_scalar('ValLoss/Epoch/2loss_loc', losses_val.avg(2), epoch)
+            summarywriter.add_scalar('ValLoss/Epoch/3loss_sp_balance', losses_val.avg(3), epoch)
+            summarywriter.add_scalar('ValLoss/Epoch/4all_loss', losses_val.avg(4), epoch)
 
             # save best ckpt
             if losses_val.avg(4) < best_loss:
@@ -129,10 +129,6 @@ def train_one_epoch(args, config, model, train_loader, optimizer, criterion, epo
 
     model.train()
     for i, (class_name, model_id, points) in enumerate(train_loader):
-        # for name, param in model.named_parameters():
-        #     # print(name, param, param.grad)
-        #     if param.requires_grad and torch.isnan(param).any():
-        #         print(f"梯度NaN detected for parameter: {name}")
         # run model
         batch_size = points.shape[0]
         points = points.cuda()
@@ -148,30 +144,28 @@ def train_one_epoch(args, config, model, train_loader, optimizer, criterion, epo
 
         # # =========================================================================
         # # for test
-        # print("11111")
         # for name, param in model.named_parameters():
         #     if torch.isnan(param).any():
-        #         print(name)
-        # nn.utils.clip_grad_norm_(model.parameters(), 3, norm_type=2)
+        #         print("before step, parameter", name, torch.isnan(param).any(), torch.isinf(param).any())
+        # # nn.utils.clip_grad_norm_(model.parameters(), 3, norm_type=2)
         # optimizer.step()
-        # print("22222")
         # for name, param in model.named_parameters():
         #     if torch.isnan(param).any():
-        #         print(name)
-        # print("33333")
+        #         print("after step, parameter", name, torch.isnan(param).any(), torch.isinf(param).any())
         # for name, param in model.named_parameters():
         #     if param.grad is not None and torch.isnan(param.grad).any():
-        #         print(name)
+        #         print("after step, grad", name, torch.isnan(param.grad).any(), torch.isinf(param.grad).any())
+        #         exit()
         # # =========================================================================
 
         # summary
         losses.update([loss_fit.item(), loss_ss.item(), loss_loc.item(), loss_sp_balance.item(), loss.item()])
         n_itr = epoch * n_batches + i
-        summarywriter.add_scalar('Loss/Batch/loss_fit', loss_fit.item(), n_itr)
-        summarywriter.add_scalar('Loss/Batch/loss_ss', loss_ss.item(), n_itr)
-        summarywriter.add_scalar('Loss/Batch/loss_loc', loss_loc.item(), n_itr)
-        summarywriter.add_scalar('Loss/Batch/loss_sp_balance', loss_sp_balance.item(), n_itr)
-        summarywriter.add_scalar('Loss/Batch/all_loss', loss.item(), n_itr)
+        summarywriter.add_scalar('Loss/Batch/0loss_fit', loss_fit.item(), n_itr)
+        summarywriter.add_scalar('Loss/Batch/1loss_ss', loss_ss.item(), n_itr)
+        summarywriter.add_scalar('Loss/Batch/2loss_loc', loss_loc.item(), n_itr)
+        summarywriter.add_scalar('Loss/Batch/3loss_sp_balance', loss_sp_balance.item(), n_itr)
+        summarywriter.add_scalar('Loss/Batch/4all_loss', loss.item(), n_itr)
         summarywriter.add_scalar('Loss/Batch/LR', optimizer.param_groups[0]['lr'], n_itr)
 
         torch.cuda.empty_cache()
@@ -190,7 +184,7 @@ def train_one_epoch(args, config, model, train_loader, optimizer, criterion, epo
     return losses
 
 
-def validate(args, model, val_loader, criterion, epoch, summarywriter):
+def validate(args, config, model, val_loader, criterion, epoch, summarywriter):
     print_log(args, f"Start validating epoch {epoch}")
     losses = AverageMeter(['loss_fit', 'loss_ss', 'loss_loc', 'loss_sp_balance', 'all_loss'])
     n_batches = len(val_loader)
@@ -200,7 +194,8 @@ def validate(args, model, val_loader, criterion, epoch, summarywriter):
         # run model
         batch_size = points.shape[0]
         points = points.cuda()
-        p_feat, sp_atten, sp_feat, sp_param = model(points)
+        with torch.no_grad():
+            p_feat, sp_atten, sp_feat, sp_param = model(points)
 
         # loss
         loss_fit, loss_ss, loss_loc, loss_sp_balance = criterion(points, p_feat, sp_atten, sp_feat, sp_param)
@@ -219,8 +214,10 @@ def validate(args, model, val_loader, criterion, epoch, summarywriter):
                       (i + 1, n_batches, ['%.8f' % l for l in losses.val()]))
 
         # visual output
-        if i == 0 and(epoch + 1) % 25 == 0:
-            colors = torch.rand(points.shape) * 255
+        if i == 0 and(epoch + 1) % 10 == 0:
+            sp_colors = torch.rand(config.model.superpoint_num, 3).cuda() * 255
+            sp_idx = sp_atten.argmax(dim=1)
+            colors = sp_colors[sp_idx].view(points.shape)
             summarywriter.add_mesh('val/pointcloud', points, colors, global_step=epoch)
 
     print_log(args,

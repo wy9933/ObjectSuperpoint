@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import numpy as np
+
 from utils.utils import *
+from utils.superquadrics import *
 
 class Encoder(nn.Module):
     def __init__(self, config):
@@ -30,16 +33,16 @@ class Encoder(nn.Module):
 
         self.input_layer = nn.Sequential(
             nn.Conv1d(self.input_dim, self.hidden_dim[0], 1),
-            nn.BatchNorm1d(self.hidden_dim[0]),
+            # nn.BatchNorm1d(self.hidden_dim[0]),
             nn.ReLU(inplace=True)
         )
 
         self.hidden_layers = nn.Sequential()
         hidden_in = self.hidden_dim[0]
         for c in self.hidden_dim[1:]:
-            self.hidden_layers.append(nn.Sequential(
+            self.hidden_layers.add_module(str(len(self.hidden_layers)), nn.Sequential(
                 nn.Conv1d(hidden_in, c, 1),
-                nn.BatchNorm1d(c),
+                # nn.BatchNorm1d(c),
                 nn.ReLU(inplace=True)
             ))
             hidden_in = c
@@ -50,9 +53,9 @@ class Encoder(nn.Module):
         else:
             hidden_in = self.hidden_dim[-1]
         for c in self.output_dim:
-            self.final_layer.append(nn.Sequential(
+            self.final_layer.add_module(str(len(self.final_layer)), nn.Sequential(
                 nn.Conv1d(hidden_in, c, 1),
-                nn.BatchNorm1d(c),
+                # nn.BatchNorm1d(c),
                 nn.ReLU(inplace=True)
             ))
             hidden_in = c
@@ -108,13 +111,18 @@ class SuperPoint(nn.Module):
         self.param_mlp = nn.Sequential()
         mlp_in = self.encoder_output_dim[-1]
         for c in self.mlp_hidden_dim:
-            self.param_mlp.append(nn.Sequential(
+            self.param_mlp.add_module(str(len(self.param_mlp)), nn.Sequential(
                 nn.Conv1d(mlp_in, c, 1),
-                nn.BatchNorm1d(c),
+                # nn.BatchNorm1d(c),
                 nn.ReLU(inplace=True)
             ))
             mlp_in = c
-        self.param_mlp.append(nn.Conv1d(mlp_in, self.param_num, 1))
+
+        self.size = nn.Linear(mlp_in, 3)
+        self.shape = nn.Linear(mlp_in, 2)
+        self.deform = nn.Linear(mlp_in, 2)
+        self.translate = nn.Linear(mlp_in, 3)
+        self.rotate = nn.Linear(mlp_in, 4)
 
     def forward(self, points):
         """
@@ -136,7 +144,16 @@ class SuperPoint(nn.Module):
         sp_feat = torch.bmm(F.normalize(sp_atten, p=1, dim=2), p_feat)  # B 50(sp num) C, l1-norm on attention map last dim: dim-2
 
         # get superpoint parameters θ
-        sp_param = self.param_mlp(sp_feat.transpose(2, 1)).transpose(2, 1)  # B 50(sp num) 14
+        _sp_param = self.param_mlp(sp_feat.transpose(2, 1)).transpose(2, 1)  # B 50(sp num) C'
+
+        size = torch.sigmoid(self.size(_sp_param)) * 0.5 + 0.03
+        shape = torch.sigmoid(self.shape(_sp_param)) * 1.1 + 0.4
+        deform = torch.tanh(self.deform(_sp_param)) * 0.9
+        translate = torch.tanh(self.translate(_sp_param)) * 0.9
+        _rotate = self.rotate(_sp_param)
+        rotate = _rotate / torch.norm(_rotate, dim=-1, keepdim=True)
+
+        sp_param = torch.cat([size, shape, deform, translate, rotate], dim=-1)  # B 50(sp num) 14
 
         return p_feat, sp_atten, sp_feat, sp_param
 
@@ -155,23 +172,35 @@ class SuperPoint(nn.Module):
 
         # fit loss
         # sample points on superquadrics defined by sp_param
-        sample_num = int(N / M)
+        sample_num = int(2 * N / M)
         L = sample_num
         sample_points = batch_sample(sp_param, sample_num)  # B M L 3, L is num of points sampled from superquadrics
 
+        # using parameters to translate and rotate points
+        metrix = quaternion_to_matrix(sp_param[..., -4:])  # B M 3 3
+        trans = sp_param[..., 7:10]  # B M 3
+        points_transformed = points.unsqueeze(2)  # B N 1 3
+        trans = trans.unsqueeze(1)  # B 1 M 3
+        points_transformed = points_transformed - trans  # B N M 3
+        points_transformed = points_transformed.unsqueeze(-2)  # B N M 1 3
+        points_transformed = points_transformed.matmul(metrix.unsqueeze(1)).squeeze(-2)  # B N M 3
+        _signs = (points_transformed > 0).float() * 2 - 1
+        _abs = points_transformed.abs()
+        points_transformed = _signs * torch.max(_abs, _abs.new_tensor(1e-5))
+
         # points to superquadrics loss
-        distance_p2d = distance_point2superquadric(points, sample_points, sp_param)  # B N M
-        inf_nan_to_num(distance_p2d)
+        distance_p2d = distance_point2superquadric(points_transformed, sample_points)  # B N M
         distance_p2d = distance_p2d.transpose(2, 1)  # B M N
-        loss_fit_p2d = torch.sum(distance_p2d * sp_atten) / (N * M)
+        loss_fit_p2d = torch.sum(distance_p2d * sp_atten) / (N * M)  # paper
+        # loss_fit_p2d = torch.sum(distance_p2d * sp_atten) / N
 
         # superquadrics to points loss
         max_probs, max_indices = torch.max(sp_atten, dim=1)
         one_hot = torch.zeros_like(sp_atten, device=sp_atten.device)
         one_hot = one_hot.scatter_(1, max_indices.unsqueeze(1), 1)  # B M N
-        distance_d2p = distance_superquadric2point(points, sample_points, sp_param, one_hot)
-        inf_nan_to_num(distance_d2p)
-        loss_fit_d2p = torch.sum(distance_d2p) / (M * L)
+        distance_d2p = distance_superquadric2point(points_transformed, sample_points, one_hot)
+        loss_fit_d2p = torch.sum(distance_d2p) / (M * L)  # paper
+        # loss_fit_d2p = torch.sum(distance_d2p) / M
 
         loss_fit = loss_fit_p2d + loss_fit_d2p
 
@@ -180,21 +209,9 @@ class SuperPoint(nn.Module):
         p_feat_un = p_feat.unsqueeze(1)            # B 1 N C
         feat_dist = sp_feat_un - p_feat_un         # B M N C
         feat_dist = torch.norm(feat_dist, dim=-1)  # B M N
-        inf_nan_to_num(feat_dist)
         feat_dist = feat_dist * sp_atten           # B M N
-        loss_ss = torch.sum(feat_dist) / (M * N)
-        # loss_ss = torch.sum(feat_dist)
-
-        # feat_dist = torch.zeros(B, M, N, device=p_feat.device)
-        # for b in range(B):
-        #     for m in range(M):
-        #         _sp_feat = sp_feat[b, m]  # C
-        #         _p_feat = p_feat[b]  # N C
-        #         _sp_atten = sp_atten[b, m]  # N
-        #         _feat_dist = torch.norm(_sp_feat - _p_feat, dim=-1) * _sp_atten  # N
-        #         feat_dist[b, m] = _feat_dist
-        # inf_nan_to_num(feat_dist)
         # loss_ss = torch.sum(feat_dist) / (M * N)
+        loss_ss = torch.sum(feat_dist)  # paper
 
         # loc loss
         centriods = torch.bmm(F.normalize(sp_atten, p=1, dim=2), points)  # B M 3
@@ -202,12 +219,12 @@ class SuperPoint(nn.Module):
         points_un = points.unsqueeze(1)              # B 1 N 3
         coord_dist = centriods - points_un           # B M N 3
         coord_dist = torch.norm(coord_dist, dim=-1)  # B M N
-        inf_nan_to_num(coord_dist)
         coord_dist = coord_dist * sp_atten           # B M N
-        loss_loc = torch.sum(coord_dist) / (M * N)
-        # loss_loc = torch.sum(coord_dist)
+        # loss_loc = torch.sum(coord_dist) / (M * N)
+        loss_loc = torch.sum(coord_dist)  # paper
 
         # sp balance loss
+        # print(sp_atten.max(dim=-1)[0] - sp_atten.min(-1)[0])
         sp_atten_per_sp = torch.sum(sp_atten, dim=-1)  # B M
         sp_atten_sum = torch.sum(sp_atten_per_sp, dim=-1, keepdim=True) / M  # B 1
         loss_sp_balance = torch.sum((sp_atten_per_sp - sp_atten_sum) ** 2) / M

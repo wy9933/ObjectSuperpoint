@@ -36,7 +36,7 @@ class StyleDataset(data.Dataset):
             with open(test_data_list_file, 'r') as f:
                 test_lines = f.readlines()
             print_log(args, f'Open file {test_data_list_file}')
-            lines = test_lines + lines
+            lines = lines + test_lines
 
         self.file_list = []
         for line in lines:

@@ -16,13 +16,13 @@ def test(args, config):
     # build dataset
     if config.dataset.NAME == 'StyleDataset':
         from datasets.StyleDataset import StyleDataset
-        test_dataset = StyleDataset(args, config, 'test')
+        test_dataset = StyleDataset(args, config, 'whole')
     else:
         raise NotImplementedError(f'{config.dataset.NAME} not implemented')
 
     test_loader = data.DataLoader(test_dataset,
                                  batch_size=1,
-                                 shuffle=True,
+                                 shuffle=False,
                                  num_workers=args.num_workers,
                                  drop_last=True)
 
@@ -73,6 +73,7 @@ def test(args, config):
                 points = points[b].cpu().numpy()
                 sp_atten = sp_atten[b].cpu().numpy().T
                 sp_idx = np.argmax(sp_atten, axis=-1)
+                print(vis_file, np.unique(sp_idx, return_counts=True))
                 colors = sp_colors[sp_idx].reshape(-1, 3)
                 pcd.points = o3d.utility.Vector3dVector(points)
                 pcd.colors = o3d.utility.Vector3dVector(colors)
