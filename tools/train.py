@@ -27,7 +27,7 @@ def train(args, config, summarywriter):
                                    num_workers=args.num_workers,
                                    drop_last=True)
 
-    val_loader = data.DataLoader(train_dataset,
+    val_loader = data.DataLoader(val_dataset,
                                  batch_size=1,
                                  shuffle=False,
                                  num_workers=args.num_workers,

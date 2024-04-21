@@ -17,14 +17,14 @@ model: {
     use_global: True,
     hidden_dim: [64, 256, 1024],
   },
-  superpoint_num: 15,
+  superpoint_num: 50,
   mlp_hidden_dim: [256, 64],
   param_num: 14,
 }
 
 dataset: {
   NAME: StyleDataset,
-  DATA_ROOT: ../Point-BERT/data/style/furniture,
+  DATA_ROOT: ../Point-BERT/data/style/building,
   DATA_DIR: pc,
   SPLIT_DIR: split,
   N_POINTS: 20000,
